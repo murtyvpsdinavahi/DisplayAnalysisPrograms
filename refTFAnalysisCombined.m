@@ -7,33 +7,51 @@
 %==========================================================================
 
 
-function refTFAnalysisCombined(subjectName,expDate,protocolName,folderSourceString,gridType,loadProtocolNumber)
+function refTFAnalysisCombined%(subjectName,expDate,protocolName,folderSourceString,gridType,loadProtocolNumber)
 
-if ~exist('folderSourceString','var')  folderSourceString='/media/store/';        end
-if ~exist('gridType','var')            gridType='EEG';                  end
-if ~exist('loadProtocolNumber','var')  loadProtocolNumber = 11;         end % Vinay - anything greater than 10 will read the protocolNumber from the saved data
+% Initialise
 
-%========================Define folder paths===============================
-    folderName = fullfile(folderSourceString,'data',subjectName,gridType,expDate,protocolName);
+logExist = evalin('base','(exist(''dataLog'',''var''))');
+if  ~logExist
+    uiopen;
+    if ~exist('dataLog','var'); return; end;
+else
+    if logExist;    dataLog = evalin('base','dataLog'); end;
+end
 
-    % Get folders
-    folderExtract = fullfile(folderName,'extractedData');
-    folderSegment = fullfile(folderName,'segmentedData');
-    folderLFP = fullfile(folderSegment,'LFP');
-    folderSpikes = fullfile(folderSegment,'Spikes');
-    
-    folderBipolar = fullfile(folderLFP,'bipolar');
-    folderAverage = folderLFP;
-    folderCSD = fullfile(folderLFP,'csd');
+[dataLog,folderName] = getFolderDetails(dataLog);
+subjectName = strjoin(dataLog(1,2));
+gridType=strjoin(dataLog(2,2));
+expDate = strjoin(dataLog(3,2));
+protocolName = strjoin(dataLog(4,2));
+%electrodesToStore = (cell2mat(dataLog(7,2)));
+elecSampleRate = dataLog{9,2};
+folderSourceString=strjoin(dataLog(14,2));
+
+% Get folders
+folderExtract = fullfile(folderName,'extractedData');
+folderSegment = fullfile(folderName,'segmentedData');
+folderLFP = fullfile(folderSegment,'LFP'); % [MD]: 05-06-15: for reading ICA data
+folderSpikes = fullfile(folderSegment,'Spikes');
+
+% if ~exist('folderSourceString','var')  folderSourceString='/media/store/';        end
+% if ~exist('gridType','var')            gridType='EEG';                  end
+if ~exist('loadProtocolNumber','var');  loadProtocolNumber = 11;         end % Vinay - anything greater than 10 will read the protocolNumber from the saved data
+
+%========================Define folder paths===============================    
+folderBipolar = fullfile(folderLFP,'bipolar');
+folderAverage = folderLFP;
+folderCSD = fullfile(folderLFP,'csd');
     
 %-----
 
 % load LFP Information
-[analogChannelsStored,timeVals,~,analogInputNums] = loadlfpInfo(folderLFP);
+% [analogChannelsStored,timeVals,~,analogInputNums] = loadlfpInfo(folderLFP);
+[analogChannelsStored,timeVals,~,analogInputNums,electrodesStored] = loadlfpInfo(folderLFP);
 [neuralChannelsStored,SourceUnitIDs] = loadspikeInfo(folderSpikes);
 
 % Get Combinations
-[~,aValsUnique,eValsUnique,sValsUnique,fValsUnique,oValsUnique,cValsUnique,tValsUnique,rValsUnique,pValsUnique] = loadParameterCombinations(folderExtract);
+[~,aValsUnique,eValsUnique,sValsUnique,fValsUnique,oValsUnique,cValsUnique,tValsUnique,aaValsUnique,aeValsUnique,asValsUnique,aoValsUnique,avValsUnique,atValsUnique] = loadParameterCombinations(folderExtract);
 
 % Get properties of the Stimulus
 % stimResults = loadStimResults(folderExtract);
@@ -85,7 +103,7 @@ saveMPFlag = 1;
 % [Vinay] - define a flag to save HHT data if it is set
 saveHHTFlag = 1;
 % [Vinay] - define a flag to use badTrials for each electrode separately
-useAllBadTrials = 1;
+useAllBadTrials = 0;
 % [Vinay] - define a flag to use intersection of good trials across
 % electrodes or else to use individual electrodewise good trials
 intersectTrials = 0;
@@ -102,6 +120,7 @@ contralateralNeighbour = 1;
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%% Dynamic panel %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+figure;
 dynamicHeight = 0.06; dynamicGap=0.015; dynamicTextWidth = 0.6;
 hDynamicPanel = uipanel('Title','Parameters','fontSize', fontSizeLarge, ...
     'Unit','Normalized','Position',[dynamicStartPos panelStartHeight dynamicPanelWidth panelHeight]);
@@ -139,7 +158,7 @@ else
 end
 
 
-if strncmp(protocolName,'GRF',3)
+if (strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3))
     % Sigma
     sigmaString = getStringFromValuesGRF(sValsUnique,1);
     uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
@@ -214,23 +233,26 @@ if strncmp(protocolName,'GRF',3)
     % Select the two parameters whose values are to be varied across
     % plots/dimensions
     %======================================================================
-    parametersString = 'NA|azimuth|elevation|sigma|spatialFreq|orientation|contrast|temporalFreq';
+    
+%     if ~strncmp(protocolName,'GAV',3)
+        parametersString = 'NA|azimuth|elevation|sigma|spatialFreq|orientation|contrast|temporalFreq';
 
-    uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
-        'Position',[0 1-10*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
-        'Style','text','String','vary1','FontSize',fontSizeMedium);
-    hParam7 = uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
-        'BackgroundColor', backgroundColor, 'Position', ...
-        [dynamicTextWidth 1-10*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
-        'Style','popup','String',parametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
+        uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
+            'Position',[0 1-10*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+            'Style','text','String','vary1','FontSize',fontSizeMedium);
+        hVisParam7 = uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
+            'BackgroundColor', backgroundColor, 'Position', ...
+            [dynamicTextWidth 1-10*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+            'Style','popup','String',parametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
 
-    uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
-        'Position',[0 1-12*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
-        'Style','text','String','vary2','FontSize',fontSizeMedium);
-    hParam8 = uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
-        'BackgroundColor', backgroundColor, 'Position', ...
-        [dynamicTextWidth 1-12*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
-        'Style','popup','String',parametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
+        uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
+            'Position',[0 1-12*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+            'Style','text','String','vary2','FontSize',fontSizeMedium);
+        hVisParam8 = uicontrol('Parent',hDynamicPanel,'Unit','Normalized', ...
+            'BackgroundColor', backgroundColor, 'Position', ...
+            [dynamicTextWidth 1-12*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+            'Style','popup','String',parametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
+%     end
 
 
 elseif strncmp(protocolName,'CRS',3)
@@ -478,7 +500,7 @@ hChooseWidth = uicontrol('Parent',hPlotOptionsPanel,'Unit','Normalized', ...
 
 
 % Analysis Type
-analysisTypeString = 'ERP|FFT|delta FFT|Band Power';
+analysisTypeString = 'ERP|FFT|delta FFT|Band Power|Individual trials';
 uicontrol('Parent',hPlotOptionsPanel,'Unit','Normalized', ...
     'Position',[0 1-3*plotOptionsHeight 0.6 plotOptionsHeight], ...
     'Style','text','String','Analysis Type','FontSize',fontSizeSmall);
@@ -667,10 +689,137 @@ if strncmp(protocolName,'CRS',3)
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%% Auditory Params Panel %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Added by MD for GAV Protocol
+
+if strncmp(protocolName,'GAV',3)
+
+    selectParamHeight = 0.1; selectParamWidth = 0.5; selectParamBoxWidth = 0.20; % [Vinay] - changed width from 0.25 to 0.20
+    textWidth = 0.4; selGWidth = 0.2; selPWidth = 0.4;
+    hSelectParamPanel = uipanel('Title','Auditory Params','fontSize', fontSizeLarge, ...
+        'Unit','Normalized','Position',[selectParamStartPos panelStartHeight selectParamPanelWidth panelHeight]);
+    
+%     % Sigma
+%     sigmaString = getStringFromValuesGRF(sValsUnique,1);
+%     uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+%         'Position',[0 1-3*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+%         'Style','text','String','Sigma (Deg)','FontSize',fontSizeTiny);
+%     hSigma = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+%         'BackgroundColor', backgroundColor, 'Position', ...
+%         [dynamicTextWidth 1-3*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+%         'Style','popup','String',sigmaString,'FontSize',fontSizeTiny);
+
+    % Variables type
+    varTypeString = 'Auditory|Visual';
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-2*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Variable Type','FontSize',fontSizeTiny);
+    hVarType = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-2*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',varTypeString,'FontSize',fontSizeTiny,'Callback',{@resetVarType_Callback});
+
+    % Ripple Frequency
+    rippleFreqString = getStringFromValuesGRF(asValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-4*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Ripple/tone Freq (Hz)','FontSize',fontSizeTiny);
+    hRipFreq = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-4*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',rippleFreqString,'FontSize',fontSizeTiny);
+
+    % Phase
+    ripplePhaseString = getStringFromValuesGRF(aoValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-5*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Ripple Phase (Deg)','FontSize',fontSizeTiny);
+    hRipPhase = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-5*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',ripplePhaseString,'FontSize',fontSizeTiny);
+
+    % ModDepth
+    modDepthString = getStringFromValuesGRF(avValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-6*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Mod. Depth/Vol (%)','FontSize',fontSizeTiny);
+    hRipModDepth = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-6*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',modDepthString,'FontSize',fontSizeTiny);
+
+    % Ripple Velocity
+    ripVelString = getStringFromValuesGRF(atValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-7*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Ripple Velocity (Hz)','FontSize',fontSizeTiny);
+    hRipVelocity = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-7*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',ripVelString,'FontSize',fontSizeTiny);
+
+    % Auditory Azimuth
+    audAzimuthString = getStringFromValuesGRF(aaValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-8*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight],...
+        'Style','text','String','Auditory Azimuth (Deg)','FontSize',fontSizeTiny);
+    hAudAzimuth = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-8*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',audAzimuthString,'FontSize',fontSizeTiny);
+
+    % Auditory Elevation
+    audElevationString = getStringFromValuesGRF(aeValsUnique,1);
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-9*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','Auditory Elevation (Deg)','FontSize',fontSizeTiny);
+    hAudElevation = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position',...
+        [dynamicTextWidth 1-9*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',audElevationString,'FontSize',fontSizeTiny);
+    
+    %======================================================================
+    % Select the two parameters whose values are to be varied across
+    % plots/dimensions
+    %======================================================================
+    
+    audParametersString = 'NA|AudAzimuth|AudElevation|RippleFreq|RipPhase|RipVol/RipMD|RipVel';
+
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-10*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','vary1','FontSize',fontSizeTiny);
+    hAudParam7 = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-10*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',audParametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
+
+    uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'Position',[0 1-12*(dynamicHeight+dynamicGap) dynamicTextWidth dynamicHeight], ...
+        'Style','text','String','vary2','FontSize',fontSizeTiny);
+    hAudParam8 = uicontrol('Parent',hSelectParamPanel,'Unit','Normalized', ...
+        'BackgroundColor', backgroundColor, 'Position', ...
+        [dynamicTextWidth 1-12*(dynamicHeight+dynamicGap) 1-dynamicTextWidth dynamicHeight], ...
+        'Style','popup','String',audParametersString,'FontSize',fontSizeTiny,'Callback',{@resetVaryParams_Callback});
+end
+
+if ~strncmp(protocolName,'GAV',3)
+    varType = 2;
+    param7 = get(hVisParam7, 'val');
+    param8 = get(hVisParam8, 'val');
+end
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Get plots and message handles
 
 % Get electrode array information
-gridLayout = 1; % 64 electrodes
+if strcmp(dataLog{15,2},'actiCap64')
+    gridLayout = 2; % actiCap 64 electrodes
+else
+    gridLayout = 1; % easyCap 64 electrodes
+end
+
 electrodeGridPos = [staticStartPos panelStartHeight staticPanelWidth panelHeight];
 hElectrodes = showElectrodeLocations(electrodeGridPos,analogChannelsStored(get(hAnalogChannel,'val')), ...
     colorNames(get(hChooseColor,'val')),[],1,0,gridType,subjectName,gridLayout);
@@ -721,14 +870,24 @@ if strncmp(protocolName,'CRS',3)
 
     hVaryParamPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridPos,gapSmall);
 
-elseif strncmp(protocolName,'GRF',3)
+elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
     
-    param7 = get(hParam7, 'val');
-    param8 = get(hParam8, 'val');
+    if strncmp(protocolName,'GRF',3)
+        varType = 2;
+    elseif strncmp(protocolName,'GAV',3)
+        resetVarType_Callback;
+    end
     
+    if varType == 1
+        param7 = get(hAudParam7, 'val');
+        param8 = get(hAudParam8, 'val');
+    elseif varType == 2
+        param7 = get(hVisParam7, 'val');
+        param8 = get(hVisParam8, 'val');
+    end
     gabor7 = []; gabor8 = [];
 
-    hVaryParamPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridPos,gapSmall);
+    hVaryParamPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridPos,gapSmall);
 
 end
 
@@ -737,7 +896,7 @@ end
 % Plot the time-frequency distributions on a separate figure
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-hTFfig = figure(2);
+hTFfig = figure(2669);
 
 % Define variables/flags required in TF analysis with their default values
 plotStyle = 1; % pcolor, imagesc, raw
@@ -746,7 +905,7 @@ cmin = -1; cmax = 3; % caxis limits
 tfMethod = 1; % MTM, MP
 
 % Default MTM params
-mtmParams.Fs = 2000;
+mtmParams.Fs = 2500;
 mtmParams.tapers=[2 3]; % [1 1] case is simply stft with dpss window
 mtmParams.trialave=0;
 mtmParams.err=0;
@@ -772,8 +931,8 @@ gaussFtr = 7;
 xGap = 0.01; yGap = 0.01;
 tfPlotsHeight = 0.14; tfPlotsGap =0.02;
 tfPanelWidth = 0.98; tfPanelHeight = 0.81;
-hTFPlotsPanel = uipanel('Title','TF Plots','fontSize', fontSizeLarge, ...
-    'Unit','Normalized','Position',[xGap yGap tfPanelWidth tfPanelHeight]);
+% hTFPlotsPanel = uipanel('Title','TF Plots','fontSize', fontSizeLarge, ...
+%     'Unit','Normalized','Position',[xGap yGap tfPanelWidth tfPanelHeight]);
 
 startXPos = 2*xGap; startYPos = 2*yGap; % start from left bottom corner
 
@@ -783,8 +942,8 @@ varyGridTFPos = [startXPos startYPos tfPanelWidth-2*xGap tfPanelHeight-5*yGap];
 if strncmp(protocolName,'CRS',3)
     hVaryParamTFPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridTFPos,gapSmall);
 
-elseif strncmp(protocolName,'GRF',3)
-    hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridTFPos,gapSmall);
+elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
+    hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridTFPos,gapSmall);
 end
 
 %__________________________________________________________________________
@@ -1030,7 +1189,8 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
 % functions
     function plotData_Callback(~,~)
         
-        if strncmp(protocolName,'GRF',3)
+        
+        if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
             a=get(hAzimuth,'val');
             e=get(hElevation,'val');
             s=get(hSigma,'val');
@@ -1050,6 +1210,31 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
             t=cell2mat(get(hTemporalFreq,'val'));
             r=cell2mat(get(hRadius,'val'));
             p=cell2mat(get(hSpatialPhase,'val'));
+        end
+        
+        if strncmp(protocolName,'GAV',3)
+            aa=get(hAudAzimuth,'val');
+            ae=get(hAudElevation,'val');
+            as=get(hRipFreq,'val');
+            ao=get(hRipPhase,'val');
+            av=get(hRipModDepth,'val');
+            at=get(hRipVelocity,'val');
+            
+            clear param7 param8;
+            if varType == 1
+                param7 = get(hAudParam7, 'val') + 8;
+                param8 = get(hAudParam8, 'val') + 8;
+            elseif varType == 2
+                param7 = get(hVisParam7, 'val');
+                param8 = get(hVisParam8, 'val');
+            end
+        else
+            aa=[];
+            ae=[];
+            as=[];
+            ao=[];
+            av=[];
+            at=[];
         end
         
         analysisType = get(hAnalysisType,'val');
@@ -1079,8 +1264,8 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
         
         if strncmp(protocolName,'CRS',3)
             hVaryParamPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridPos,gapSmall);
-        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridPos,gapSmall);
+        elseif strncmp(protocolName,'GRF',3)|| strncmp(protocolName,'GAV',3)
+            hVaryParamPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridPos,gapSmall);
         end
         
         % Vinay - get analogChannel info freshly here from the first figure
@@ -1103,7 +1288,7 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
         end
 
 
-        plotLFPDataVaryParameters1Channel(hVaryParamPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,r,p,gabor7, param7, gabor8, param8, folderLFP,...
+        plotLFPDataVaryParameters1Channel(hVaryParamPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,aa,ae,as,ao,av,at,r,p,gabor7, param7, gabor8, param8, folderLFP,...
             analysisType,timeVals,plotColor,BLMin,BLMax,STMin,STMax,folderName, protocolNumber, notchData,useBipolar,plotSEM,holdOnState,plotLineWidth,...
             protocolName,useAllBadTrials,mtmParams,movingWin,fBandLow,fBandHigh);
 
@@ -1114,7 +1299,7 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
         end
 
 
-        if analysisType==1 || analysisType==4 % ERP or Band Power (vs time)
+        if analysisType==1 || analysisType==4 || analysisType==5 % ERP or Band Power or individual trials [MD](vs time)
             xMin = str2double(get(hStimMin,'String'));
             xMax = str2double(get(hStimMax,'String'));
         else
@@ -1146,7 +1331,7 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
         rescaleData(hVaryParamPlot,xMin,xMax,yLims);
         
         % [Vinay] - rescale the TF plots
-        figure(2);
+        figure(2669);
         
         if plotStyle ~= 3 % pcolor, imagesc
             xMin = str2double(get(hStimMin,'String'));
@@ -1178,7 +1363,7 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
         rescaleData(hVaryParamPlot,xMin,xMax,getYLims(hVaryParamPlot));
         
         % [Vinay] - rescale the TF plots
-        figure(2);
+        figure(2669);
         
         if plotStyle ~= 3 % pcolor, imagesc
             xMin = str2double(get(hStimMin,'String'));
@@ -1445,16 +1630,16 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
        if strncmp(protocolName,'CRS',3)
             hVaryParamPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridPos,gapSmall);
        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridPos,gapSmall);
+            hVaryParamPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridPos,gapSmall);
        end
        
        % [Vinay] - reset the TF grid as well
-       figure(2);
+       figure(2669);
        
        if strncmp(protocolName,'CRS',3)
             hVaryParamTFPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridTFPos,gapSmall);
        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridTFPos,gapSmall);
+            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridTFPos,gapSmall);
        end
         
     end
@@ -1468,23 +1653,33 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
             gabor8 = adjFactor - get(hGabor8,'val');
         end
 
-        param7 = get(hParam7, 'val');
-        param8 = get(hParam8, 'val');
-        
+        if strncmp(protocolName,'GAV',3)
+            if varType == 1
+                param7 = get(hAudParam7, 'val') + 8;
+                param8 = get(hAudParam8, 'val') + 8;
+            elseif varType == 2
+                param7 = get(hVisParam7, 'val');
+                param8 = get(hVisParam8, 'val');
+            end
+        else
+            param7 = get(hVisParam7, 'val');
+            param8 = get(hVisParam8, 'val');            
+            varType = 2;    
+        end
         
         if strncmp(protocolName,'CRS',3)
             hVaryParamPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridPos,gapSmall);
-        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridPos,gapSmall);
+        elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
+            hVaryParamPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridPos,gapSmall);
         end
         
         % [Vinay] - reset the TF grid as well
-        figure(2);
+        figure(2669);
         
         if strncmp(protocolName,'CRS',3)
             hVaryParamTFPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridTFPos,gapSmall);
-        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridTFPos,gapSmall);
+        elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
+            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridTFPos,gapSmall);
         end
         
     end
@@ -1520,7 +1715,7 @@ uicontrol('Parent',hTFPlotSettingsPanel,'Unit','Normalized', ...
 
 %--------------------------------------------------------------------------
 
-function valsUnique = getValsUniqueGRF(paramNumber)
+function valsUnique = getValsUniqueGAV(paramNumber)
         
         switch (paramNumber-1)
             case 1
@@ -1537,6 +1732,18 @@ function valsUnique = getValsUniqueGRF(paramNumber)
                 valsUnique = cValsUnique;
             case 7
                 valsUnique = tValsUnique;
+            case 9
+                valsUnique = aaValsUnique;
+            case 10
+                valsUnique = aeValsUnique;
+            case 11
+                valsUnique = asValsUnique;
+            case 12
+                valsUnique = aoValsUnique;
+            case 13
+                valsUnique = avValsUnique;
+            case 14
+                valsUnique = atValsUnique;
             otherwise
                 valsUnique = [];
         end
@@ -1600,7 +1807,7 @@ end
     %----main TF plotting function----------------
     function plotTFData_Callback(~,~)
         
-        if strncmp(protocolName,'GRF',3)
+        if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
             a=get(hAzimuth,'val');
             e=get(hElevation,'val');
             s=get(hSigma,'val');
@@ -1622,6 +1829,31 @@ end
             p=cell2mat(get(hSpatialPhase,'val'));
         end
         
+        if strncmp(protocolName,'GAV',3)
+            aa=get(hAudAzimuth,'val');
+            ae=get(hAudElevation,'val');
+            as=get(hRipFreq,'val');
+            ao=get(hRipPhase,'val');
+            av=get(hRipModDepth,'val');
+            at=get(hRipVelocity,'val');
+            
+            clear param7 param8;
+            if varType == 1
+                param7 = get(hAudParam7, 'val') + 8;
+                param8 = get(hAudParam8, 'val') + 8;
+            elseif varType == 2
+                param7 = get(hVisParam7, 'val');
+                param8 = get(hVisParam8, 'val');
+            end
+        else
+            aa=[];
+            ae=[];
+            as=[];
+            ao=[];
+            av=[];
+            at=[];
+        end
+        
         analysisType = get(hAnalysisType,'val');
         plotColor = colorNames(get(hChooseColor,'val'));
         BLMin = str2double(get(hBaselineMin,'String'));
@@ -1641,9 +1873,9 @@ end
         mtmParams.tapers(2) = str2double(get(hMTMTapersK,'String'));
         movingWin(1) = str2double(get(hMTMwLen,'String'));
         movingWin(2) = str2double(get(hMTMwStep,'String'));
-        mtmParams.trialave = 1;
+        mtmParams.trialave = 0;
         mtmParams.err=0;
-        mtmParams.pad=-1; % no padding
+        mtmParams.pad=0; % no padding
         
         % MP
         numAtomsMP = str2double(get(hMPnumAtoms,'String'));
@@ -1666,8 +1898,8 @@ end
         
         if strncmp(protocolName,'CRS',3)
             hVaryParamTFPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridTFPos,gapSmall);
-        elseif strncmp(protocolName,'GRF',3)
-            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridTFPos,gapSmall);
+        elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
+            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridTFPos,gapSmall);
         end
         
         
@@ -1690,7 +1922,7 @@ end
         end
         
         
-        tfplotLFPDataVaryParameters1Channel(hVaryParamTFPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,r,p,gabor7, param7, gabor8, param8,folderLFP,...
+        tfplotLFPDataVaryParameters1Channel(hVaryParamTFPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,aa,ae,as,ao,av,at,r,p,gabor7, param7, gabor8, param8,folderLFP,...
             timeVals,plotColor,BLMin,BLMax,STMin,STMax,folderName, protocolNumber, notchData,useBipolar,...
             tfMethod,mtmParams,movingWin,numAtomsMP,plotStyle,spectrumType,cmin,cmax, holdOnState, saveMPFlag,loadProtocolNumber,plotLineWidth,...
             Nstd,NE,gaussFtr,saveHHTFlag,protocolName,useAllBadTrials);
@@ -1800,7 +2032,7 @@ end
         if strncmp(protocolName,'CRS',3)
             hVaryParamTFPlot = getPlotHandles(length(getValsUnique(gabor7, param7)),length(getValsUnique(gabor8, param8)),varyGridTFPos,gapSmall);
         elseif strncmp(protocolName,'GRF',3)
-            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGRF(param7)),length(getValsUniqueGRF(param8)),varyGridTFPos,gapSmall);
+            hVaryParamTFPlot = getPlotHandles(length(getValsUniqueGAV(param7)),length(getValsUniqueGAV(param8)),varyGridTFPos,gapSmall);
         end
         
         
@@ -1832,7 +2064,7 @@ end
         end
 
         
-        reftfplotLFPDataVaryParameters1Channel(hVaryParamTFPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,r,p,gabor7, param7, gabor8, param8,folderLFP,...
+        reftfplotLFPDataVaryParameters1Channel(hVaryParamTFPlot,analogChannelString,analogChannelString2,a,e,s,f,o,c,t,aa,ae,as,ao,av,at,r,p,gabor7, param7, gabor8, param8,folderLFP,...
             timeVals,plotColor,BLMin,BLMax,STMin,STMax,folderName, protocolNumber, notchData,useDiff,...
             tfMethod,mtmParams,movingWin,numAtomsMP,plotStyle,spectrumType,cmin,cmax, holdOnState, saveMPFlag,loadProtocolNumber,plotLineWidth,...
             Nstd,NE,gaussFtr,saveHHTFlag,protocolName,useAllBadTrials,...
@@ -1840,13 +2072,16 @@ end
             takeLogTrial,existsBipolarData,contralateralNeighbour);
         
     
-    end
+ end
 
+function resetVarType_Callback(~,~)
+    varType = get(hVarType, 'val');
+end
 
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-function plotLFPDataVaryParameters1Channel(plotHandles,channelString,analogChannelString2,a,e,s,f,o,c,t,r,p,gaborNum1,paramNum1,gaborNum2,paramNum2,folderLFP,...
+function plotLFPDataVaryParameters1Channel(plotHandles,channelString,analogChannelString2,a,e,s,f,o,c,t,aa,ae,as,ao,av,at,r,p,gaborNum1,paramNum1,gaborNum2,paramNum2,folderLFP,...
 analysisType,timeVals,plotColor,BLMin,BLMax,STMin,STMax,folderName, protocolNumber, notchData,useBipolar,plotSEM,holdOnState,plotLineWidth,...
 protocolName,useAllBadTrials,mtmParams,movingWin,fBandLow,fBandHigh)
 
@@ -1859,7 +2094,7 @@ timeForComputation = [40 100]/1000; % ms
 freqForComputation = [30 80]; % Hz
 
 [parameterCombinations,aValsUnique,eValsUnique,sValsUnique,...
-    fValsUnique,oValsUnique,cValsUnique,tValsUnique,rValsUnique,pValsUnique] = loadParameterCombinations(folderExtract);
+    fValsUnique,oValsUnique,cValsUnique,tValsUnique,aaValsUnique,aeValsUnique,asValsUnique,aoValsUnique,avValsUnique,atValsUnique,rValsUnique,pValsUnique] = loadParameterCombinations(folderExtract);
 
 numRows = size(plotHandles,1);
 numCols = size(plotHandles,2);
@@ -1886,7 +2121,7 @@ end
 
 
 % Choosing the good position trials
-if strncmp(protocolName,'GRF',3)
+if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
     % [Vinay] - repeat the set of parameters for each gabor depending on the
     % number of columns to be drawn
     aList = repmat(a,numRows,numCols);
@@ -1896,7 +2131,15 @@ if strncmp(protocolName,'GRF',3)
     oList = repmat(o,numRows,numCols);
     cList = repmat(c,numRows,numCols);
     tList = repmat(t,numRows,numCols);
-
+    
+    if strncmp(protocolName,'GAV',3)
+        aaList = repmat(aa,numRows,numCols);
+        aeList = repmat(ae,numRows,numCols);
+        asList = repmat(as,numRows,numCols);
+        aoList = repmat(ao,numRows,numCols);
+        avList = repmat(av,numRows,numCols);
+        atList = repmat(at,numRows,numCols);
+    end
 
         % [Vinay] decide the row parameter based on paramNum1
             for row = 1:numRows
@@ -1931,6 +2174,30 @@ if strncmp(protocolName,'GRF',3)
                         tList(row,:) = row; 
                         titleParam1 = 'TF: ';
                         titleList1 = tValsUnique;
+                    case 9
+                        aaList(row,:) = row; 
+                        titleParam1 = 'AudAzi: ';
+                        titleList1 = aaValsUnique;
+                    case 10
+                        aeList(row,:) = row; 
+                        titleParam1 = 'AudEle: ';
+                        titleList1 = aeValsUnique;
+                    case 11
+                        asList(row,:) = row; 
+                        titleParam1 = 'RipFreq: ';
+                        titleList1 = asValsUnique;
+                    case 12
+                        aoList(row,:) = row; 
+                        titleParam1 = 'RipPhase: ';
+                        titleList1 = aoValsUnique;
+                    case 13
+                        avList(row,:) = row; 
+                        titleParam1 = 'RipVol/MD: ';
+                        titleList1 = avValsUnique;
+                    case 14
+                        atList(row,:) = row; 
+                        titleParam1 = 'RipVel: ';
+                        titleList1 = atValsUnique;
                     otherwise
                         disp('No particular gabor or parameter selected');
                 end
@@ -1971,6 +2238,30 @@ if strncmp(protocolName,'GRF',3)
                         tList(row,:) = 1:length(tValsUnique);
                         titleParam2 = 'TF: ';
                         titleList2 = tValsUnique;
+                    case 9
+                        aaList(row,:) = 1:length(aaValsUnique); 
+                        titleParam2 = 'AudAzi: ';
+                        titleList2 = aaValsUnique;
+                    case 10
+                        aeList(row,:) = 1:length(aeValsUnique); 
+                        titleParam2 = 'AudElev: ';
+                        titleList2 = aeValsUnique;
+                    case 11
+                        asList(row,:) = 1:length(asValsUnique); 
+                        titleParam2 = 'RipFreq: ';
+                        titleList2 = asValsUnique;
+                    case 12
+                        aoList(row,:) = 1:length(aoValsUnique); 
+                        titleParam2 = 'RipPhase: ';
+                        titleList2 = aoValsUnique;
+                    case 13
+                        avList(row,:) = 1:length(avValsUnique); 
+                        titleParam2 = 'RipVol/MD: ';
+                        titleList2 = avValsUnique;
+                    case 14
+                        atList(row,:) = 1:length(atValsUnique); 
+                        titleParam2 = 'RipVel: ';
+                        titleList2 = atValsUnique;
                     otherwise
                         disp('No particular gabor or parameter selected');
                 end
@@ -1996,6 +2287,22 @@ if strncmp(protocolName,'GRF',3)
     if (oLen> 1)           oLen=oLen+1;                    end
     if (cLen> 1)           cLen=cLen+1;                    end
     if (tLen> 1)           tLen=tLen+1;                    end
+    
+    if strncmp(protocolName,'GAV',3)
+        aaLen = length(aaValsUnique);
+        aeLen = length(aeValsUnique);
+        asLen = length(asValsUnique);        
+        aoLen = length(aoValsUnique);
+        avLen = length(avValsUnique);
+        atLen = length(atValsUnique);
+        
+        if (aaLen> 1)           aaLen=aaLen+1;                    end
+        if (aeLen> 1)           aeLen=aeLen+1;                    end
+        if (asLen> 1)           asLen=asLen+1;                    end
+        if (aoLen> 1)           aoLen=aoLen+1;                    end
+        if (avLen> 1)           avLen=avLen+1;                    end
+        if (atLen> 1)           atLen=atLen+1;                    end
+    end
 
 elseif strncmp(protocolName,'CRS',3)
     
@@ -2148,6 +2455,33 @@ for k=1:numRows
         if strncmp(protocolName,'GRF',3)
             clear goodPos
             goodPos = parameterCombinations{aList(k,j),eList(k,j),sList(k,j),fList(k,j),oList(k,j),cList(k,j),tList(k,j)};
+    %         goodPos = setdiff(goodPos,badTrials);
+
+            %------------------
+            % Vinay - select good trials as per the electrode(s)
+    %         useAllBadTrials = 1;
+            if useAllBadTrials && existsBadTrialFile
+                elecIndex1 = (strcmp(channelString,nameElec) == 1);
+
+                if ~useBipolar
+                    elecBadTrials = allBadTrials{elecIndex1};
+                    disp(['No. of Bad trials for ' channelString ': ' num2str(length(elecBadTrials))]);
+                else
+                    elecIndex2 = (strcmp(analogChannelString2,nameElec) == 1);
+                    elecBadTrials = unique([allBadTrials{elecIndex1} allBadTrials{elecIndex2}]);
+                    disp(['No. of Bad trials for ' channelString ' and ' analogChannelString2 ': ' num2str(length(elecBadTrials))]);
+                end
+                
+                goodPos = setdiff(goodPos,elecBadTrials);
+            else
+                goodPos = setdiff(goodPos,badTrials);
+                
+            end
+            %-------------------
+            
+        elseif strncmp(protocolName,'GAV',3)
+            clear goodPos
+            goodPos = parameterCombinations{aList(k,j),eList(k,j),sList(k,j),fList(k,j),oList(k,j),cList(k,j),tList(k,j),aaList(k,j),aeList(k,j),asList(k,j),aoList(k,j),avList(k,j),atList(k,j)};
     %         goodPos = setdiff(goodPos,badTrials);
 
             %------------------
@@ -2370,7 +2704,11 @@ for k=1:numRows
 
                 xsComputation = intersect(find(timeVals>=timeForComputation(1)),find(timeVals<timeForComputation(2)));
                 freqComputation = intersect(find(xsST>=freqForComputation(1)),find(xsST<=freqForComputation(2)));
-
+                
+                
+%                 meanData = mean(analogData,2)'; 
+%                 analogData = analogData - repmat(meanData',1,size(analogData,2)); % [MD]: DC correction by equating mean of the data to zero
+                
                 % Vinay - added this notch data check
                 if notchData
                     analogData = analogDataNotched;
@@ -2394,7 +2732,9 @@ for k=1:numRows
 
                     clear analogData analogDataNotched
                     load(fullfile(folderLFP,analogChannelString2));
-
+%                     meanData = mean(analogData,2)'; 
+%                     analogData = analogData - repmat(meanData',1,size(analogData,2)); % [MD]: DC correction by equating mean of the data to zero
+                    
                     if notchData
                         analogData2 = analogDataNotched;
                     else
@@ -2403,9 +2743,13 @@ for k=1:numRows
                     end
                     analogData = analogData1 - analogData2;
                 end
-
+                
                 if analysisType == 1        % compute ERP
                     clear erp
+                    
+                    meanData = mean(analogData(goodPos,:),2)'; 
+                    analogData(goodPos,:) = analogData(goodPos,:) - repmat(meanData',1,size(analogData(goodPos,:),2)); % [MD]: DC correction by equating mean of the data to zero
+                    
                     erp = mean(analogData(goodPos,:),1);
 
                     plot(plotHandles(k,j),timeVals,erp,'color',plotColor,'Linewidth',plotLineWidth);
@@ -2439,6 +2783,24 @@ for k=1:numRows
 %                     hLegERP{colorNumber} = [num2str(k) num2str(j)];
 
 
+                elseif analysisType == 5 % MD
+                    clear trialData
+                    trialData = analogData(goodPos,:);
+                    
+                    meanData = mean(trialData,2)'; 
+                    trialData = trialData - repmat(meanData',1,size(trialData,2)); % [MD]: DC correction by equating mean of the data to zero
+
+                    plot(plotHandles(k,j),timeVals,trialData,'Linewidth',plotLineWidth);
+
+                    if paramNum1==6 % Orientation tuning
+                        computationVals(j) = abs(min(trialData(xsComputation)));
+                    end
+                    
+                    % ---- plot ERPs for all cases together----------
+%                     set(hERP,'Nextplot','add');
+%                     colorNumber = (k-1)*numCols + j; % there are numRows*numCols numbers and we go in an increasing order
+%                     plot(hERP,timeVals,trialData,'color',colorsList(colorNumber,:),'Linewidth',plotLineWidth);
+%                     hLegERP{colorNumber} = [num2str(k) num2str(j)];
                 else
 
                     fftBL = abs(fft(analogData(goodPos,BLPos),[],2));
@@ -2466,7 +2828,7 @@ for k=1:numRows
                         takeLogTrial = 0;
                         showMean = 1;
                         mtmParams.trialave=0;
-                        [~,dS,t2,f2] = getSpectrum(analogData(goodPos,:),mtmParams,movingWin,takeLogTrial,BLMin,BLMax,timeVals);
+                        [~,~,dS,t2,f2] = getSpectrum(analogData(goodPos,:),mtmParams,movingWin,takeLogTrial,BLMin,BLMax,timeVals);
                         
                         freqRange = (f2 >= fBandLow) & (f2 <= fBandHigh);
                         
@@ -2497,7 +2859,7 @@ for k=1:numRows
                 if strncmp(protocolName,'CRS',3)
                     titleGabor1 = titleGabor(gaborNum1);
                     titleGabor2 = titleGabor(gaborNum2);
-                elseif strncmp(protocolName,'GRF',3)
+                elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
                     titleGabor1 = 'gabor';
                     titleGabor2 = 'gabor';
                 end
@@ -2668,46 +3030,21 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%c%%%%%%%%%
 %%%%%%%%%%%%c%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % load Data
-function [analogChannelsStored,timeVals,goodStimPos,analogInputNums] = loadlfpInfo(folderLFP) %#ok<*STOUT>
-load(fullfile(folderLFP,'lfpInfo'));
-if ~exist('analogInputNums','var')
-    analogInputNums=[];
-end
-end
-function [neuralChannelsStored,SourceUnitID] = loadspikeInfo(folderSpikes)
-fileName = [folderSpikes 'spikeInfo.mat'];
-if exist(fileName,'file')
-    load(fileName);
-else
-    neuralChannelsStored=[];
-    SourceUnitID=[];
-end
-end
-function [parameterCombinations,aValsUnique,eValsUnique,sValsUnique,...
-    fValsUnique,oValsUnique,cValsUnique,tValsUnique, rValsUnique, pValsUnique] = loadParameterCombinations(folderExtract)
-% [Vinay] - added rValsUnique and pValsUnique for radius and spatial phase
-load(fullfile(folderExtract,'parameterCombinations.mat'));
-
-if ~exist('rValsUnique','var')
-    rValsUnique=[];
-end
-
-if ~exist('pValsUnique','var')
-    pValsUnique=[];
-end
-
-if ~exist('sValsUnique','var')
-    sValsUnique=rValsUnique;
-end
-
-if ~exist('cValsUnique','var')
-    cValsUnique=[];
-end
-
-if ~exist('tValsUnique','var')
-    tValsUnique=[];
-end
-end
+% function [analogChannelsStored,timeVals,goodStimPos,analogInputNums] = loadlfpInfo(folderLFP) %#ok<*STOUT>
+% load(fullfile(folderLFP,'lfpInfo'));
+% if ~exist('analogInputNums','var')
+%     analogInputNums=[];
+% end
+% end
+% function [neuralChannelsStored,SourceUnitID] = loadspikeInfo(folderSpikes)
+% fileName = [folderSpikes 'spikeInfo.mat'];
+% if exist(fileName,'file')
+%     load(fileName);
+% else
+%     neuralChannelsStored=[];
+%     SourceUnitID=[];
+% end
+% end
 % function stimResults = loadStimResults(folderExtract)
 % load ([folderExtract 'stimResults']);
 % end
@@ -2730,7 +3067,7 @@ function [electrodesStoredPair,electrodesStoredCz] = loadBipolarlfpInfo(folderBi
 load(fullfile(folderBipolar,'lfpInfo'));
 end
 
-function tfplotLFPDataVaryParameters1Channel(tfplotHandles,channelString,analogChannelString2,a,e,s,f,o,c,t,r,p,gaborNum1,paramNum1,gaborNum2,paramNum2,folderLFP,...
+function tfplotLFPDataVaryParameters1Channel(tfplotHandles,channelString,analogChannelString2,a,e,s,f,o,c,t,aa,ae,as,ao,av,at,r,p,gaborNum1,paramNum1,gaborNum2,paramNum2,folderLFP,...
             timeVals,plotColor,BLMin,BLMax,STMin,STMax,folderName, protocolNumber, notchData,useBipolar,...
             tfMethod,mtmParams,movingWin,numAtomsMP,plotStyle,spectrumType,cmin,cmax,holdOnState,saveMPFlag,loadProtocolNumber,plotLineWidth,...
             Nstd,NE,gaussFtr,saveHHTFlag,protocolName,useAllBadTrials)
@@ -2754,8 +3091,8 @@ function tfplotLFPDataVaryParameters1Channel(tfplotHandles,channelString,analogC
 %         freqForComputation = [40 60]; % Hz
 
         [parameterCombinations,aValsUnique,eValsUnique,sValsUnique,...
-            fValsUnique,oValsUnique,cValsUnique,tValsUnique,rValsUnique,pValsUnique] = loadParameterCombinations(folderExtract);
-        
+    fValsUnique,oValsUnique,cValsUnique,tValsUnique,aaValsUnique,aeValsUnique,asValsUnique,aoValsUnique,avValsUnique,atValsUnique,rValsUnique,pValsUnique] = loadParameterCombinations(folderExtract);
+
         numRows = size(tfplotHandles,1);
         numCols = size(tfplotHandles,2);
 
@@ -2778,7 +3115,7 @@ function tfplotLFPDataVaryParameters1Channel(tfplotHandles,channelString,analogC
         
         
         % Choosing the good position trials
-if strncmp(protocolName,'GRF',3)
+if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
     % [Vinay] - repeat the set of parameters for each gabor depending on the
     % number of columns to be drawn
     aList = repmat(a,numRows,numCols);
@@ -2789,7 +3126,15 @@ if strncmp(protocolName,'GRF',3)
     cList = repmat(c,numRows,numCols);
     tList = repmat(t,numRows,numCols);
 
-
+    if strncmp(protocolName,'GAV',3)
+        aaList = repmat(aa,numRows,numCols);
+        aeList = repmat(ae,numRows,numCols);
+        asList = repmat(as,numRows,numCols);
+        aoList = repmat(ao,numRows,numCols);
+        avList = repmat(av,numRows,numCols);
+        atList = repmat(at,numRows,numCols);
+    end
+    
         % [Vinay] decide the row parameter based on paramNum1
             for row = 1:numRows
                 switch (paramNum1-1)
@@ -2823,6 +3168,30 @@ if strncmp(protocolName,'GRF',3)
                         tList(row,:) = row; 
                         titleParam1 = 'TF: ';
                         titleList1 = tValsUnique;
+                    case 9
+                        aaList(row,:) = row; 
+                        titleParam1 = 'AudAzi: ';
+                        titleList1 = aaValsUnique;
+                    case 10
+                        aeList(row,:) = row; 
+                        titleParam1 = 'AudEle: ';
+                        titleList1 = aeValsUnique;
+                    case 11
+                        asList(row,:) = row; 
+                        titleParam1 = 'RipFreq: ';
+                        titleList1 = asValsUnique;
+                    case 12
+                        aoList(row,:) = row; 
+                        titleParam1 = 'RipPhase: ';
+                        titleList1 = aoValsUnique;
+                    case 13
+                        avList(row,:) = row; 
+                        titleParam1 = 'RipVol/MD: ';
+                        titleList1 = avValsUnique;
+                    case 14
+                        atList(row,:) = row; 
+                        titleParam1 = 'RipVel: ';
+                        titleList1 = atValsUnique;
                     otherwise
                         disp('No particular gabor or parameter selected');
                 end
@@ -2863,6 +3232,30 @@ if strncmp(protocolName,'GRF',3)
                         tList(row,:) = 1:length(tValsUnique);
                         titleParam2 = 'TF: ';
                         titleList2 = tValsUnique;
+                    case 9
+                        aaList(row,:) = 1:length(aaValsUnique); 
+                        titleParam2 = 'AudAzi: ';
+                        titleList2 = aaValsUnique;
+                    case 10
+                        aeList(row,:) = 1:length(aeValsUnique); 
+                        titleParam2 = 'AudElev: ';
+                        titleList2 = aeValsUnique;
+                    case 11
+                        asList(row,:) = 1:length(asValsUnique); 
+                        titleParam2 = 'RipFreq: ';
+                        titleList2 = asValsUnique;
+                    case 12
+                        aoList(row,:) = 1:length(aoValsUnique); 
+                        titleParam2 = 'RipPhase: ';
+                        titleList2 = aoValsUnique;
+                    case 13
+                        avList(row,:) = 1:length(avValsUnique); 
+                        titleParam2 = 'RipVol/MD: ';
+                        titleList2 = avValsUnique;
+                    case 14
+                        atList(row,:) = 1:length(atValsUnique); 
+                        titleParam2 = 'RipVel: ';
+                        titleList2 = atValsUnique;
                     otherwise
                         disp('No particular gabor or parameter selected');
                 end
@@ -2888,6 +3281,22 @@ if strncmp(protocolName,'GRF',3)
     if (oLen> 1)           oLen=oLen+1;                    end
     if (cLen> 1)           cLen=cLen+1;                    end
     if (tLen> 1)           tLen=tLen+1;                    end
+    
+    if strncmp(protocolName,'GAV',3)
+        aaLen = length(aaValsUnique);
+        aeLen = length(aeValsUnique);
+        asLen = length(asValsUnique);        
+        aoLen = length(aoValsUnique);
+        avLen = length(avValsUnique);
+        atLen = length(atValsUnique);
+        
+        if (aaLen> 1)           aaLen=aaLen+1;                    end
+        if (aeLen> 1)           aeLen=aeLen+1;                    end
+        if (asLen> 1)           asLen=asLen+1;                    end
+        if (aoLen> 1)           aoLen=aoLen+1;                    end
+        if (avLen> 1)           avLen=avLen+1;                    end
+        if (atLen> 1)           atLen=atLen+1;                    end
+    end
 
 
 elseif strncmp(protocolName,'CRS',3)
@@ -3064,6 +3473,39 @@ end
                         goodPos = setdiff(goodPos,elecBadTrials);
                     else
                         goodPos = setdiff(goodPos,badTrials);    
+                    end
+                    %-------------------
+                    
+                elseif strncmp(protocolName,'GAV',3)
+                    clear goodPos
+                    goodPos = parameterCombinations{aList(k,j),eList(k,j),sList(k,j),fList(k,j),oList(k,j),cList(k,j),tList(k,j),aaList(k,j),aeList(k,j),asList(k,j),aoList(k,j),avList(k,j),atList(k,j)};
+            %         goodPos = setdiff(goodPos,badTrials);
+            
+                    tagPos1 = [num2str(aList(k,j)) num2str(eList(k,j)) num2str(sList(k,j))...
+                               num2str(fList(k,j)) num2str(oList(k,j)) num2str(cList(k,j))...
+                               num2str(tList(k,j)) num2str(aaList(k,j)) num2str(aeList(k,j))...
+                               num2str(asList(k,j)) num2str(aoList(k,j)) num2str(avList(k,j))...
+                               num2str(atList(k,j))];
+
+                    %------------------
+                    % Vinay - select good trials as per the electrode(s)
+            %         useAllBadTrials = 1;
+                    if useAllBadTrials && existsBadTrialFile
+                        elecIndex1 = (strcmp(channelString,nameElec) == 1);
+
+                        if ~useBipolar
+                            elecBadTrials = allBadTrials{elecIndex1};
+                            disp(['No. of Bad trials for ' channelString ': ' num2str(length(elecBadTrials))]);
+                        else
+                            elecIndex2 = (strcmp(analogChannelString2,nameElec) == 1);
+                            elecBadTrials = unique([allBadTrials{elecIndex1} allBadTrials{elecIndex2}]);
+                            disp(['No. of Bad trials for ' channelString ' and ' analogChannelString2 ': ' num2str(length(elecBadTrials))]);
+                        end
+
+                        goodPos = setdiff(goodPos,elecBadTrials);
+                    else
+                        goodPos = setdiff(goodPos,badTrials);
+
                     end
                     %-------------------
 
@@ -3438,16 +3880,37 @@ end
                             t = t + timeVals(1); % shift the t values to the actual time
 
                             % baseline period calculation
-                            tBL = (t>=BLMin) & (t<=BLMax); % baseline time indices
-                            S1BL = S1(tBL,:); % part of spectrum corresponding to the baseline period
-                            mlogS1BL = mean(conv2Log(S1BL),1); % mean log power 
-                            % across these time points at every frequency
+                            tBL = intersect(find(t>=BLMin),find(t<=BLMax)); % baseline time indices
+                            
+                            if mtmParams.trialave == 1 % MD
+                                S1BL = S1(tBL,:); % part of spectrum corresponding to the baseline period
+%                                 mlogS1BL = mean(conv2Log(S1BL),1); % mean log power 
+%                                 % across these time points at every frequency
+                                mlogS1BL = conv2Log(mean(S1BL,1)); % mean log power 
+                                % across these time points at every frequency
+                                
+                                % difference spectrum calculation
+                                dS1 = 10*(conv2Log(S1) - repmat(mlogS1BL,size(S1,1),1)); % in dB 
+                                % subtract the mean baseline power at each
+                                % frequency from the raw power at that frequency at
+                                % every time point
+                                
+                            elseif mtmParams.trialave == 0
+                                S1BL = S1(tBL,:,:); % part of spectrum corresponding to the baseline period 
+%                                 mlogS1BL = mean(mean(conv2Log(S1BL),1),3); % mean log power 
+                                % across these time points at every frequency
+                                mlogS1BL = conv2Log(mean(mean(S1BL,1),3)); % mean log power 
+% %                                 across these time points at every frequency
+                                
+                                % difference spectrum calculation
+%                                 dS1 = 10*(mean(conv2Log(S1),3) - repmat(mlogS1BL,size(S1,1),1)); % in dB 
+                                dS1 = 10*(conv2Log(mean(S1,3)) - repmat(mlogS1BL,size(S1,1),1)); % in dB
+                                % subtract the mean baseline power at each
+                                % frequency from the raw power at that frequency at
+                                % every time point
+                            end                            
 
-                            % difference spectrum calculation
-                            dS1 = 10*(conv2Log(S1) - repmat(mlogS1BL,size(S1,1),1)); % in dB 
-                            % subtract the mean baseline power at each
-                            % frequency from the raw power at that frequency at
-                            % every time point
+                           
 
                             % plot the difference spectrum
                             pcolor(tfplotHandles(k,j),t,f,dS1'); shading(tfplotHandles(k,j),'interp');
@@ -3509,7 +3972,7 @@ end
 %                                    '_Ra' num2str(a(2)) 'e' num2str(e(2)) 's' num2str(s(2)) 'f' num2str(f(2)) 'o' num2str(o(2)) 'c' num2str(c(2)) 't' num2str(t(2)) 'p' num2str(p(2)) 'r' num2str(r(2)) ...
 %                                    '_Sa' num2str(a(1)) 'e' num2str(e(1)) 's' num2str(s(1)) 'f' num2str(f(1)) 'o' num2str(o(1)) 'c' num2str(c(1)) 't' num2str(t(1)) 'p' num2str(p(1)) 'r' num2str(r(1))]);
                     
-                    if strncmp(protocolName,'GRF',3)
+                    if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
                         tagPos = ['L' tagPos1];
                     elseif strncmp(protocolName,'CRS',3)
                         tagPos = ['C' tagPos3 'R' tagPos2 'S' tagPos1];
@@ -3524,6 +3987,11 @@ end
                         if strncmp(protocolName,'GRF',3)
                             mpSavedSpectrumName = (['mpSpectrum' num2str(numAtomsMP) 'atoms' '_notch' num2str(notchData)...
                                 'pos' tagPos '_protoGRF'...
+                                '_bipolar' num2str(channelString) num2str(analogChannelString2)...
+                                '_vary' num2str(paramNum1) num2str(paramNum2)]);
+                        elseif strncmp(protocolName,'GAV',3)
+                            mpSavedSpectrumName = (['mpSpectrum' num2str(numAtomsMP) 'atoms' '_notch' num2str(notchData)...
+                                'pos' tagPos '_protoGAV'...
                                 '_bipolar' num2str(channelString) num2str(analogChannelString2)...
                                 '_vary' num2str(paramNum1) num2str(paramNum2)]);
                         elseif strncmp(protocolName,'CRS',3)
@@ -3596,6 +4064,10 @@ end
                         if strncmp(protocolName,'GRF',3)
                             mpSavedSpectrumName = (['mpSpectrum' num2str(numAtomsMP) 'atoms' '_notch' num2str(notchData)...
                                 'pos_' tagPos '_protoGRF'...
+                                '_vary' num2str(paramNum1) num2str(paramNum2)]);
+                        elseif strncmp(protocolName,'GAV',3)
+                            mpSavedSpectrumName = (['mpSpectrum' num2str(numAtomsMP) 'atoms' '_notch' num2str(notchData)...
+                                'pos_' tagPos '_protoGAV'...
                                 '_vary' num2str(paramNum1) num2str(paramNum2)]);
                         elseif strncmp(protocolName,'CRS',3)
                             mpSavedSpectrumName = (['mpSpectrum' num2str(numAtomsMP) 'atoms' '_notch' num2str(notchData)...
@@ -3735,7 +4207,7 @@ end
 %                                    '_Ra' num2str(a(2)) 'e' num2str(e(2)) 's' num2str(s(2)) 'f' num2str(f(2)) 'o' num2str(o(2)) 'c' num2str(c(2)) 't' num2str(t(2)) 'p' num2str(p(2)) 'r' num2str(r(2)) ...
 %                                    '_Sa' num2str(a(1)) 'e' num2str(e(1)) 's' num2str(s(1)) 'f' num2str(f(1)) 'o' num2str(o(1)) 'c' num2str(c(1)) 't' num2str(t(1)) 'p' num2str(p(1)) 'r' num2str(r(1))]);
                     
-                    if strncmp(protocolName,'GRF',3)
+                    if strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
                         tagPos = ['L' tagPos1];
                     elseif strncmp(protocolName,'CRS',3)
                         tagPos = ['C' tagPos3 'R' tagPos2 'S' tagPos1];
@@ -3752,6 +4224,11 @@ end
                         if strncmp(protocolName,'GRF',3)
                             hhtSavedSpectrumName = (['hhtSpectrum_Nstd' num2str(Nstd) '_NE' num2str(NE) '_numIMFs' num2str(numIMFs) '_notch' num2str(notchData)...
                                 'pos' tagPos '_protoGRF'...
+                                '_bipolar' num2str(channelString) num2str(analogChannelString2)...
+                                '_vary' num2str(paramNum1) num2str(paramNum2)]);
+                        elseif strncmp(protocolName,'GAV',3)
+                            hhtSavedSpectrumName = (['hhtSpectrum_Nstd' num2str(Nstd) '_NE' num2str(NE) '_numIMFs' num2str(numIMFs) '_notch' num2str(notchData)...
+                                'pos' tagPos '_protoGAV'...
                                 '_bipolar' num2str(channelString) num2str(analogChannelString2)...
                                 '_vary' num2str(paramNum1) num2str(paramNum2)]);
                         elseif strncmp(protocolName,'CRS',3)
@@ -3802,6 +4279,10 @@ end
                         if strncmp(protocolName,'GRF',3)
                             hhtSavedSpectrumName = (['hhtSpectrum_Nstd' num2str(Nstd) '_NE' num2str(NE) '_numIMFs' num2str(numIMFs) '_notch' num2str(notchData)...
                                 'pos_' tagPos '_protoGRF'...
+                                '_vary' num2str(paramNum1) num2str(paramNum2)]);
+                        elseif strncmp(protocolName,'GAV',3)
+                            hhtSavedSpectrumName = (['hhtSpectrum_Nstd' num2str(Nstd) '_NE' num2str(NE) '_numIMFs' num2str(numIMFs) '_notch' num2str(notchData)...
+                                'pos_' tagPos '_protoGAV'...
                                 '_vary' num2str(paramNum1) num2str(paramNum2)]);
                         elseif strncmp(protocolName,'CRS',3)
                             hhtSavedSpectrumName = (['hhtSpectrum_Nstd' num2str(Nstd) '_NE' num2str(NE) '_numIMFs' num2str(numIMFs) '_notch' num2str(notchData)...
@@ -3958,7 +4439,7 @@ end
                 if strncmp(protocolName,'CRS',3)
                     titleGabor1 = titleGabor(gaborNum1);
                     titleGabor2 = titleGabor(gaborNum2);
-                elseif strncmp(protocolName,'GRF',3)
+                elseif strncmp(protocolName,'GRF',3) || strncmp(protocolName,'GAV',3)
                     titleGabor1 = 'gabor';
                     titleGabor2 = 'gabor';
                 end
@@ -6099,7 +6580,7 @@ if ~exist ('BLMax','var')
 end
 
 if ~exist('mtmParams','var')
-    mtmParams.Fs = 2000;
+    mtmParams.Fs = 2500;
     mtmParams.tapers=[2 3]; % [1 1] case is simply stft with dpss window
     mtmParams.trialave=0;
     mtmParams.err=0;
@@ -6109,6 +6590,8 @@ end
 if ~exist('movingWin','var')
     movingWin = [0.5 0.01];
 end
+
+if ~exist('specType','var'); specType=4; end; % Added by MD
 
 if takeLogTrial
     
@@ -6160,7 +6643,7 @@ else
     else
         
         mtmParams.trialave = 1; % average spectrum across trials
-        [S1,t2,f2]=mtspecgramc(data',movingWin,mtmParams);
+        [S1,t2,f2]=mtspecgramc(data',movingWin,mtmParams); % Mean added by MD
         t2 = t2 + timeVals(1); % shift the t values to the actual time
 
         tBL = (t2>=BLMin) & (t2<=BLMax); % baseline time indices
@@ -6177,4 +6660,5 @@ else
 end
 
 end
+
 
